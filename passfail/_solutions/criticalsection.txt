@@ -1,0 +1,3 @@
+Prop == [](\A t1, t2 \in Threads:
+    t1 # t2 /\ pc[t1] = "cs" => pc[t2] # "cs"
+)
