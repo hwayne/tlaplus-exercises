@@ -24,7 +24,7 @@ def process_tla(source: Path, solution: str) -> str:
     content = source.read_text()
     
     content = re.sub(
-        r'Prop\s*==\s*[^\n]+',
+        r'Typeset\s*==\s*[^\n]+',
         solution.replace('\\', '\\\\'), # Escape the solution string to handle TLA+ syntax
         content
     )
@@ -41,9 +41,9 @@ def process_tla(source: Path, solution: str) -> str:
 def parse_result(result: str) -> str:
     if "unexpected exception" in result:
         return "E"
-    elif "No error has been found." in result:
+    elif "Correct" in result:
         return "+"
-    elif "violated" in result:
+    elif "Incorrect" in result:
         return "-"
     else:
         return "E"
@@ -54,58 +54,33 @@ parser.add_argument("--tools_path",
                     default=r"D:/software/TLA+/tla2tools.jar", # Default to my computer's toolpath for now
                     help="Path to tla2tools.jar")
 
-def get_exercise_folders():
+def get_exercise_files():
     root = Path(__file__).parent
-    folders = [f for f in root.iterdir() if f.is_dir() and f.name != '_solutions']
-    return folders
+    exercises = [f for f in root.iterdir() if f.is_file() and f.suffix == ".tla"] # TODO let this work on nested directories so we can have categories of typesets
+    return exercises
 
 def run_tests(jar_path):
-    exercises = get_exercise_folders()
-    exercise_tests = []
-
-    for exercise in exercises:
-        solution_file = Path(__file__).parent / '_solutions' / f'{exercise.name}.txt'
+    print(f"{'Exercise':<15} {'+ (Pass)':<15}")
+    print("-" * 30)
+    for exercise in get_exercise_files():
+        solution_file = Path(__file__).parent / '_solutions' / f'{exercise.stem}.txt'
         if not solution_file.exists():
             continue
             
         solution = Path(solution_file).read_text()
-        
-        # Get all files in exercise directory
-        pass_files = list(exercise.glob('*_pass.tla'))[0] # temporary, assume one file for now
-        fail_files = list(exercise.glob('*_fail.tla'))[0] # temporary, assume one file for now
-        cfg = next(exercise.glob('*.cfg'))
-
-        exercise_tests.append(Exercise(
-            pass_=pass_files,
-            fail=fail_files,
-            solution=solution,
-            name=exercise.name,
-            cfg=cfg
-        ))
-
-    # Print table header before the test loop
-    print(f"{'Exercise':<15} {'+ (Pass)':<15} {'- (Fail)':<15}")
-    print("-" * 40)
-
-    for test in exercise_tests:
         with TemporaryDirectory() as run_dir:
-            
-            # Copy config file
             mc_file =  Path(run_dir) / 'Test.tla'
             mc_cfg = Path(run_dir) / 'Test.cfg'
-            mc_cfg.write_text(test.cfg.read_text())
+            mc_cfg.write_text("SPECIFICATION Spec")
             script = f"java -jar {jar_path} -workers auto -metadir {run_dir} -terse -cleanup {mc_file}"
             
-            mc_file.write_text(process_tla(test.pass_, test.solution))
-            pass_result = subprocess.run(script, text=True, capture_output=True, shell=True)
-    
+            mc_file.write_text(process_tla(exercise, solution))
+            result = subprocess.run(script, text=True, capture_output=True, shell=True).stdout
 
-            mc_file.write_text(process_tla(test.fail, test.solution))
-            fail_result = subprocess.run(script, text=True, capture_output=True, shell=True)
-
-            print(f"{test.name:<15} {parse_result(pass_result.stdout):<15} {parse_result(fail_result.stdout):<15}")
+            print(f"{exercise.stem:<15} {parse_result(result):<15}")
         
 
 if __name__ == "__main__":
     args = parser.parse_args()
     run_tests(args.tools_path)
+

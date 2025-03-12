@@ -4,7 +4,7 @@ In this set of exercises, you will be presented with two specifications that eac
 
 
 ```tla
----- module example_pass ----
+---- MODULE example_pass ----
 VARIABLE x
 
 Init == x = TRUE
@@ -12,7 +12,7 @@ Next == x' = TRUE
 Spec == Init /\ [][Next]_x
 ====
 
----- module example_fail ----
+---- MODULE example_fail ----
 VARIABLE x
 
 Init == x = TRUE
@@ -21,7 +21,7 @@ Spec == Init /\ [][Next]_x
 ====
 ```
 
-In this example, one solution would be `Prop == []x`. Solutions to each exercise can be found in the `solutions` folder.
+In this example, one solution would be `Prop == []x`. Solutions to each exercise can be found in the `_solutions` folder.
 
 Additional rules:
 
@@ -36,3 +36,6 @@ Tips:
 
 - Try to determine how the two specs diverge: what's a behavior in the failing spec that isn't possible in the passing spec?
 
+### Purpose
+
+Writing properties is a core TLA+ skill.
