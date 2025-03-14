@@ -1,30 +1,20 @@
 """
-A quick script that tests that all of the exercise solutions are correct (pass the _pass spec, fail the _fail spec).
+A quick script that tests that all of the exercise solutions are correct
 
-Written in part with Claude 3.5
+Written in part with Claude
 """
-import subprocess
 import re
-from tempfile import TemporaryDirectory, NamedTemporaryFile # For state cleanup
+from tempfile import TemporaryDirectory # For state cleanup
 from pathlib import Path
 import argparse
-from dataclasses import dataclass
+import asyncio
 
-@dataclass
-class Exercise:
-    pass_: Path
-    fail: Path
-    solution: str
-    cfg: Path
-    name: str
-
-    # TODO move process_tla into a method here
 
 def process_tla(source: Path, solution: str) -> str:
     content = source.read_text()
     
     content = re.sub(
-        r'Typeset\s*==\s*[^\n]+',
+        r'Typeset.+\s*==\s*[^\n]+',
         solution.replace('\\', '\\\\'), # Escape the solution string to handle TLA+ syntax
         content
     )
@@ -48,37 +38,76 @@ def parse_result(result: str) -> str:
     else:
         return "E"
 
+async def run_tlc_process(script: str):
+    proc = await asyncio.create_subprocess_shell(
+        script,
+        stdout=asyncio.subprocess.PIPE,
+        stderr=asyncio.subprocess.PIPE,
+        shell=True
+    )
+    stdout, stderr = await proc.communicate()
+    return stdout.decode()
 
 parser = argparse.ArgumentParser()
 parser.add_argument("--tools_path", 
                     default=r"D:/software/TLA+/tla2tools.jar", # Default to my computer's toolpath for now
                     help="Path to tla2tools.jar")
 
-def get_exercise_files():
+def get_exercise_files() -> list[Path]:
     root = Path(__file__).parent
-    exercises = [f for f in root.iterdir() if f.is_file() and f.suffix == ".tla"] # TODO let this work on nested directories so we can have categories of typesets
-    return exercises
+    return list(root.glob("**/*.tla"))
 
-def run_tests(jar_path):
-    print(f"{'Exercise':<15} {'+ (Pass)':<15}")
-    print("-" * 30)
-    for exercise in get_exercise_files():
+async def run_test(exercise, jar_path, temp_dir_base, semaphore):
+    # Use semaphore to limit concurrent execution
+    async with semaphore:
         solution_file = Path(__file__).parent / '_solutions' / f'{exercise.stem}.txt'
         if not solution_file.exists():
-            continue
+            return None
             
         solution = Path(solution_file).read_text()
-        with TemporaryDirectory() as run_dir:
-            mc_file =  Path(run_dir) / 'Test.tla'
-            mc_cfg = Path(run_dir) / 'Test.cfg'
-            mc_cfg.write_text("SPECIFICATION Spec")
-            script = f"java -jar {jar_path} -workers auto -metadir {run_dir} -terse -cleanup {mc_file}"
-            
-            mc_file.write_text(process_tla(exercise, solution))
-            result = subprocess.run(script, text=True, capture_output=True, shell=True).stdout
-
-            print(f"{exercise.stem:<15} {parse_result(result):<15}")
         
+        # Create a unique directory for each test
+        run_dir = Path(temp_dir_base) / f"test_{exercise.stem}"
+        run_dir.mkdir()
+        
+        mc_file = run_dir / 'Test.tla'
+        mc_cfg = run_dir / 'Test.cfg'
+        mc_cfg.write_text("SPECIFICATION Spec")
+        script = f"java -jar {jar_path} -workers 1 -metadir {run_dir} -terse -cleanup {mc_file} -fpmem 20"
+        
+        mc_file.write_text(process_tla(exercise, solution))
+        result = await run_tlc_process(script)
+        
+        # Return a tuple with exercise name and result status
+        return (exercise.stem, parse_result(result))
+
+async def run_tests_async(jar_path):
+    exercises = get_exercise_files()
+    results = []
+    
+    # Create a semaphore limiting to 5 concurrent tasks
+    semaphore = asyncio.Semaphore(5)
+    
+    with TemporaryDirectory() as base_dir:
+        # Create tasks for all exercises that have solution files
+        tasks = []
+        for exercise in exercises:
+            tasks.append(run_test(exercise, jar_path, base_dir, semaphore))
+        
+        # Wait for all tasks to complete
+        results = await asyncio.gather(*tasks)
+        
+        # Filter out None results (exercises without solutions)
+        results = [r for r in results if r is not None]
+    
+    # Print results after all tests have finished
+    print(f"{'Exercise':<15} {'+ (Pass)':<15}")
+    print("-" * 30)
+    for name, status in results:
+        print(f"{name:<15} {status:<15}")
+
+def run_tests(jar_path):
+    return asyncio.run(run_tests_async(jar_path))
 
 if __name__ == "__main__":
     args = parser.parse_args()
