@@ -35,6 +35,7 @@ Additional rules:
 Tips:
 
 - Try to determine how the two specs diverge: what's a behavior in the failing spec that isn't possible in the passing spec?
+- Specs prefixed with `wf_` or `sf_` cover weak/strong fairness. Do the weak fairness version of the exercise first!
 
 ### Purpose
 

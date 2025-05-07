@@ -53,14 +53,24 @@ parser = argparse.ArgumentParser()
 parser.add_argument("--tools_path", 
                     default=r"D:/software/TLA+/tla2tools.jar", # Default to my computer's toolpath for now
                     help="Path to tla2tools.jar")
+parser.add_argument("spec", nargs="?", help="Optional name of a specific spec to test")
 
-def get_exercise_folders():
+def get_exercise_folders(spec_name=None):
     root = Path(__file__).parent
-    folders = [f for f in root.iterdir() if f.is_dir() and f.name != '_solutions']
-    return folders
+    if spec_name:
+        # If a specific spec is requested, look for the folder with that name
+        folder = root / spec_name
+        if folder.exists() and folder.is_dir():
+            return [folder]
+        else:
+            print(f"Warning: No exercise folder found with name '{spec_name}'")
+            return []
+    else:
+        # Otherwise return all folders
+        return [f for f in root.iterdir() if f.is_dir() and f.name != '_solutions']
 
-def run_tests(jar_path):
-    exercises = get_exercise_folders()
+def run_tests(jar_path, spec_name=None):
+    exercises = get_exercise_folders(spec_name)
     exercise_tests = []
 
     for exercise in exercises:
@@ -108,4 +118,4 @@ def run_tests(jar_path):
 
 if __name__ == "__main__":
     args = parser.parse_args()
-    run_tests(args.tools_path)
+    run_tests(args.tools_path, args.spec)

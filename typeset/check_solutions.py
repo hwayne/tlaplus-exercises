@@ -52,10 +52,19 @@ parser = argparse.ArgumentParser()
 parser.add_argument("--tools_path", 
                     default=r"D:/software/TLA+/tla2tools.jar", # Default to my computer's toolpath for now
                     help="Path to tla2tools.jar")
+parser.add_argument("spec", nargs="?", help="Optional name of a specific spec to test")
 
-def get_exercise_files() -> list[Path]:
+def get_exercise_files(spec_name=None) -> list[Path]:
     root = Path(__file__).parent
-    return list(root.glob("**/*.tla"))
+    if spec_name:
+        # If a specific spec is requested, look for it
+        files = list(root.glob(f"**/{spec_name}.tla"))
+        if not files:
+            print(f"Warning: No specification file found with name '{spec_name}'")
+        return files
+    else:
+        # Otherwise return all TLA files
+        return list(root.glob("**/*.tla"))
 
 async def run_test(exercise, jar_path, temp_dir_base, semaphore):
     # Use semaphore to limit concurrent execution
@@ -81,8 +90,8 @@ async def run_test(exercise, jar_path, temp_dir_base, semaphore):
         # Return a tuple with exercise name and result status
         return (exercise.stem, parse_result(result))
 
-async def run_tests_async(jar_path):
-    exercises = get_exercise_files()
+async def run_tests_async(jar_path, spec_name=None):
+    exercises = get_exercise_files(spec_name)
     results = []
     
     # Create a semaphore limiting to 5 concurrent tasks
@@ -105,11 +114,14 @@ async def run_tests_async(jar_path):
     print("-" * 30)
     for name, status in results:
         print(f"{name:<15} {status:<15}")
+    
+    if spec_name and not results:
+        print(f"No solution found for '{spec_name}'")
 
-def run_tests(jar_path):
-    return asyncio.run(run_tests_async(jar_path))
+def run_tests(jar_path, spec_name=None):
+    return asyncio.run(run_tests_async(jar_path, spec_name))
 
 if __name__ == "__main__":
     args = parser.parse_args()
-    run_tests(args.tools_path)
+    run_tests(args.tools_path, args.spec)
 
